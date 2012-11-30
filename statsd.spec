@@ -245,7 +245,7 @@ fi
 
 
 %changelog
-* Thu Nov 29 2012 David Raistrick <keen@icantclick.org> - 0.5.0-2
+* Thu Nov 29 2012 David Raistrick <keen99@gmail.com> - 0.5.0-2
 - add magic to update graphite configs to match up with statsd defaults
-* Tue Nov 27 2012 David Raistrick <keen@icantclick.org> - 0.5.0-1
+* Tue Nov 27 2012 David Raistrick <keen99@gmail.com> - 0.5.0-1
 - nearly complete rewrite to use etsy statsd - based on oli99sc's is24-statsd rpm which uses a different statsd build
