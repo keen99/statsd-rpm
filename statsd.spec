@@ -3,7 +3,7 @@ Name:           statsd
 #fetch the tarball from here too
 #wget --no-check-certificate https://github.com/etsy/statsd/archive/v0.5.0.tar.gz -O statsd-0.5.0.tar.gz
 Version:        0.5.0
-Release:        2%{?dist}
+Release:        3%{?dist}
 Summary:        monitoring daemon for graphite and others, that aggregates events received by udp in 10 second intervals
 Group:          Applications/Internet
 License:        Etsy open source license
@@ -83,32 +83,7 @@ fi
 exit 0
 
 %post
-chkconfig --add %{name}
-##while this seems a bit overkill, it's to handle the yum upgrade case and preserve running/not running state
-if [ $1 -gt 1 ]; then
-    # restart service if it was running
-    if /sbin/service %{name} status > /dev/null 2>&1; then
-        echo "Restarting %{name} service because it was running."
-        if ! /sbin/service %{name} restart ; then
-                logger -s -t "%name" -- "Installation failure. Not able to restart the service." 
-                exit 1
-        fi
-    else
-	echo "Starting ${name}"
-        if ! /sbin/service %{name} start ; then
-                logger -s -t "%name" -- "Installation failure. Not able to start the service." 
-                exit 1
-        fi
-    fi
-else
-#go ahead and start it if we didn't hit the above case - we chkconfig'd it on after all.
-	echo "Starting ${name}"
-        if ! /sbin/service %{name} start ; then
-                logger -s -t "%name" -- "Installation failure. Not able to start the service." 
-                exit 1
-        fi
-fi
-
+#before we start statds
 ##update carbon configs if they exist to match up to default settings for statsd
 if [ -d %{_sysconfdir}/carbon ]
  then
@@ -215,10 +190,41 @@ retentions = 10:2160,60:10080,600:262974
 		fi
 	fi
 
+	echo "Restarting carbon-aggregator to apply changes"
+	sbin/service carbon-aggregator restart
 else
 	echo "WARNING: %{_sysconfdir}/carbon not found, assuming you don't have graphite installed here"
 	echo "not performing graphite setup"
 fi
+
+#now after we've got carbon updated...
+chkconfig --add %{name}
+##while this seems a bit overkill, it's to handle the yum upgrade case and preserve running/not running state
+if [ $1 -gt 1 ]; then
+    # restart service if it was running
+    if /sbin/service %{name} status > /dev/null 2>&1; then
+        echo "Restarting %{name} service because it was running."
+        if ! /sbin/service %{name} restart ; then
+                logger -s -t "%name" -- "Installation failure. Not able to restart the service." 
+                exit 1
+        fi
+    else
+	echo "Starting ${name}"
+        if ! /sbin/service %{name} start ; then
+                logger -s -t "%name" -- "Installation failure. Not able to start the service." 
+                exit 1
+        fi
+    fi
+else
+#go ahead and start it if we didn't hit the above case - we chkconfig'd it on after all.
+	echo "Starting ${name}"
+        if ! /sbin/service %{name} start ; then
+                logger -s -t "%name" -- "Installation failure. Not able to start the service." 
+                exit 1
+        fi
+fi
+
+
 exit 0
 
 %clean
@@ -245,7 +251,10 @@ fi
 
 
 %changelog
-* Thu Nov 29 2012 David Raistrick <keen99@gmail.com> - 0.5.0-2
+* Fri Dec 7 2012 David Raistrick <keen@icantclick.org> - 0.5.0-3
+- reorder configs and service start to get carbon configs updated -before- we start statsd, prevents things like 
+  statsd.numStats from using the default schema
+* Thu Nov 29 2012 David Raistrick <keen@icantclick.org> - 0.5.0-2
 - add magic to update graphite configs to match up with statsd defaults
-* Tue Nov 27 2012 David Raistrick <keen99@gmail.com> - 0.5.0-1
+* Tue Nov 27 2012 David Raistrick <keen@icantclick.org> - 0.5.0-1
 - nearly complete rewrite to use etsy statsd - based on oli99sc's is24-statsd rpm which uses a different statsd build
