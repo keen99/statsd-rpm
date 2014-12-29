@@ -1,0 +1,177 @@
+#!/bin/bash
+
+## started life as init.d script for https://github.com/oli99sc/statsd-rpm
+## thanks!
+# hacked up and added better errors on fails
+#
+#   /etc/rc.d/init.d/statsd
+#
+# Starts the statsd daemon
+#
+# chkconfig: 2345 20 80
+# description: Frontend aggregatation of messages destined for graphite daemon
+# processname: statsd
+
+### BEGIN INIT INFO
+# Provides: statsd
+# Defalt-Start: 2 3 4 5
+# Default-Stop: 0 1 6
+# Description: Frontend aggregatation of messages destined for graphite daemon
+### END INIT INFO
+
+
+
+# Source function library.
+. /etc/rc.d/init.d/functions
+
+NAME=statsd
+INSTALL_DIR=/usr/share/$NAME
+NODE_EXE=/usr/bin/node
+
+if ! [ -x $NODE_EXE ]
+ then
+	echo "$NODE_EXE missing or not executable, die"
+	exit 1
+fi
+if ! [ -f $INSTALL_DIR/stats.js ] 
+ then
+	echo "$INSTALL_DIR/stats.js missing, die"
+	exit 1
+fi
+
+RETVAL=0
+
+#
+# See how we were called.
+#
+
+start() {
+    # Check if it is already running
+
+	pid=$(getpid)
+    if [ ! -f /var/lock/subsys/$NAME ]; then
+	if [ "x$pid" = "x" ]
+	 then
+	        echo -n $"Starting $NAME daemon: "
+	        # daemon
+	        su -c "exec $NODE_EXE $INSTALL_DIR/stats.js /etc/$NAME/config.js >/dev/null 2>&1 < /dev/null" -s /bin/sh statsd &
+	        RETVAL=$?
+	        if [ $RETVAL -eq 0 ]; then
+	            touch /var/lock/subsys/$NAME
+	            echo_success
+	        else
+	            echo_failure
+       		fi
+	else
+		echo "$NAME already running on $pid"
+	        echo_failure
+	fi  
+    else
+        if [ "x$pid" = "x" ]
+         then
+		echo "$NAME has a lockfile but isn't running, removing"
+	        rm -f /var/lock/subsys/$NAME
+		start
+	else
+		echo "ERROR - we should not get in here!"
+		echo_failure
+	fi
+    fi
+    echo
+    return $RETVAL
+}
+
+stop() {
+    echo -n $"Stopping $NAME daemon: "
+	pid=$(getpid)
+    if [ "x$pid" = "x" ]
+     then
+	echo "not running"
+        rm -f /var/lock/subsys/$NAME
+    else
+	    kill $pid
+	    RETVAL=$?
+	    if [ $RETVAL -eq 0 ]; then
+	        rm -f /var/lock/subsys/$NAME
+	        echo_success
+	    else
+	        echo_failure
+	    fi
+    fi
+    echo
+    return $RETVAL
+}
+
+
+restart() {
+    stop
+    start
+}    
+
+reload() {
+echo "reload not supported"
+exit 0
+##I dont know what the intention of this logic was from the original init script - but when I -HUP node, it just stops running....
+	pid=$(getpid)
+	trap "" sighup
+    echo -n "$NAME reloading with -HUP"
+    kill -HUP $pid
+    if [ $RETVAL -eq 0 ]; then
+	echo_success
+    else
+	echo_failure
+    fi
+    echo
+    return $RETVAL
+}    
+
+getpid() {
+	ps aux | grep stats.js | grep "^statsd.*node" | awk '{print $2}'
+}
+
+case "$1" in
+start)
+    start
+    ;;
+stop)
+    stop
+    ;;
+#reload)
+#    reload
+#    ;;
+restart)
+    restart
+    ;;
+condrestart)
+    if [ -f /var/lock/subsys/$NAME ]; then
+        restart
+    fi
+    ;;
+status)
+	pid=$(getpid)
+    if [ -f /var/lock/subsys/$NAME ]; then
+	if [ "x$pid" = "x" ]
+	 then
+		echo "$NAME has lockfile but no running pid!"
+		exit 1
+	else
+	        echo "$NAME is running"
+	        exit 0
+	fi
+    else
+	if [ "x$pid" = "x" ]
+	 then
+	        echo "$NAME is stopped"
+	        exit 3
+	else
+		echo "$NAME doesnt have a lockfile, but IS still running - pid: $pid"
+		exit 1
+	fi
+    fi
+    ;;
+*)
+    echo $"Usage: $0 {start|stop|status|restart|condrestart}"
+    exit 1
+esac
+
+exit $RETVAL
